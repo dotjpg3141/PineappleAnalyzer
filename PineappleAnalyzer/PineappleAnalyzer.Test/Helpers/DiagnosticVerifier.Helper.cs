@@ -45,9 +45,17 @@ namespace TestHelper
             foreach (var project in projects)
             {
                 var compilationWithAnalyzers = project.GetCompilationAsync().Result.WithAnalyzers(ImmutableArray.Create(analyzer));
-                var diags = compilationWithAnalyzers.GetAnalyzerDiagnosticsAsync().Result;
+
+                // TODO(jpg): add parameter flag to ignore compiler errors
+                var diags = compilationWithAnalyzers.GetAllDiagnosticsAsync().Result;
+
                 foreach (var diag in diags)
                 {
+                    if (diag.Id.StartsWith("CS") && diag.Severity != DiagnosticSeverity.Error)
+                    {
+                        continue;
+                    }
+
                     if (diag.Location == Location.None || diag.Location.IsInMetadata)
                     {
                         diagnostics.Add(diag);
