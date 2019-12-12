@@ -1,0 +1,42 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29326.143
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PineappleAnalyzer", "PineappleAnalyzer\PineappleAnalyzer\PineappleAnalyzer.csproj", "{4DCEE260-D7A2-4E7D-B48B-9532BB5B2484}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PineappleAnalyzer.Test", "PineappleAnalyzer\PineappleAnalyzer.Test\PineappleAnalyzer.Test.csproj", "{06526797-D970-4BC9-8823-8326D93FA675}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PineappleAnalyzer.Vsix", "PineappleAnalyzer\PineappleAnalyzer.Vsix\PineappleAnalyzer.Vsix.csproj", "{3A48C3D0-4100-4E60-86E8-C5F2E5C21333}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{4D30D50B-3B7F-4163-B996-4E8A5A60D69D}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4DCEE260-D7A2-4E7D-B48B-9532BB5B2484}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4DCEE260-D7A2-4E7D-B48B-9532BB5B2484}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4DCEE260-D7A2-4E7D-B48B-9532BB5B2484}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4DCEE260-D7A2-4E7D-B48B-9532BB5B2484}.Release|Any CPU.Build.0 = Release|Any CPU
+		{06526797-D970-4BC9-8823-8326D93FA675}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{06526797-D970-4BC9-8823-8326D93FA675}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{06526797-D970-4BC9-8823-8326D93FA675}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{06526797-D970-4BC9-8823-8326D93FA675}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3A48C3D0-4100-4E60-86E8-C5F2E5C21333}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3A48C3D0-4100-4E60-86E8-C5F2E5C21333}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3A48C3D0-4100-4E60-86E8-C5F2E5C21333}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3A48C3D0-4100-4E60-86E8-C5F2E5C21333}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {00D088BC-A594-48A9-ACB0-54832FDF11DE}
+	EndGlobalSection
+EndGlobal
