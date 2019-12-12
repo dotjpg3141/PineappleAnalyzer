@@ -23,7 +23,7 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
         private static void AnalyzeSwitchStatement(SyntaxNodeAnalysisContext context)
         {
             var switchStatement = (SwitchStatementSyntax)context.Node;
-            if (!switchStatement.Sections.Any(HasDefaultSwitchLabel))
+            if (!switchStatement.Sections.Any((section) => HasDefaultSwitchLabel(context, section)))
             {
                 var diagnostic = Diagnostic.Create(
                     DiagnosticDescriptors.RequiredDefaultSwitchLabel,
@@ -34,17 +34,33 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
             }
         }
 
-        private static bool HasDefaultSwitchLabel(SwitchSectionSyntax switchSection)
+        private static bool HasDefaultSwitchLabel(SyntaxNodeAnalysisContext context, SwitchSectionSyntax switchSection)
         {
-            return switchSection.Labels.Any(IsDefaultLabel);
+            return switchSection.Labels.Any((label) => IsDefaultLabel(context, label));
         }
 
-        private static bool IsDefaultLabel(SwitchLabelSyntax switchLabel)
+        private static bool IsDefaultLabel(SyntaxNodeAnalysisContext context, SwitchLabelSyntax switchLabel)
         {
             switch (switchLabel.Kind())
             {
                 case SyntaxKind.DefaultSwitchLabel:
                     return true;
+
+                case SyntaxKind.CasePatternSwitchLabel:
+                {
+                    var casePatternSwitchLabel = (CasePatternSwitchLabelSyntax)switchLabel;
+
+                    var condition = casePatternSwitchLabel.WhenClause?.Condition;
+                    if (condition != null)
+                    {
+                        var constantValue = context.SemanticModel.GetConstantValue(condition, context.CancellationToken);
+                        return constantValue.HasValue
+                            && constantValue.Value is bool boolValue
+                            && boolValue;
+                    }
+
+                    return casePatternSwitchLabel.Pattern.IsKind(SyntaxKind.VarPattern);
+                }
 
                 default:
                     return false;
