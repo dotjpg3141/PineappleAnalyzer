@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Testing;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace TestHelper
@@ -28,6 +29,11 @@ namespace TestHelper
         protected virtual DiagnosticAnalyzer GetBasicDiagnosticAnalyzer()
         {
             return null;
+        }
+
+        protected virtual ReferenceAssemblies GetReferenceAssemblies()
+        {
+            return ReferenceAssemblies.Default;
         }
 
         #endregion To be implemented by Test classes
@@ -88,7 +94,7 @@ namespace TestHelper
         /// <param name="expected">DiagnosticResults that should appear after the analyzer is run on the sources</param>
         private void VerifyDiagnostics(string[] sources, string language, DiagnosticAnalyzer analyzer, params DiagnosticResult[] expected)
         {
-            var diagnostics = GetSortedDiagnostics(sources, language, analyzer);
+            var diagnostics = GetSortedDiagnostics(sources, language, analyzer, GetReferenceAssemblies());
             VerifyDiagnosticResults(diagnostics, analyzer, expected);
         }
 
