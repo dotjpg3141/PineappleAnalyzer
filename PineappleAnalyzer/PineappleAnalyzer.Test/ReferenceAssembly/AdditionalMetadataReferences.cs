@@ -17,7 +17,7 @@ namespace Test.Utilities
         public static ReferenceAssemblies DefaultWithNewtonsoftJson { get; } = Default
             .AddPackages(ImmutableArray.Create(new PackageIdentity("Newtonsoft.Json", "10.0.1")));
 
-        public static ReferenceAssemblies DefaultWithEntityFramework { get; } = Default
+        public static ReferenceAssemblies DefaultWithEntityFramework6 { get; } = Default
             .AddPackages(ImmutableArray.Create(new PackageIdentity("EntityFramework", "6.4.0")));
 
         public static MetadataReference SystemCollectionsImmutableReference { get; } = MetadataReference.CreateFromFile(typeof(ImmutableHashSet<>).Assembly.Location);

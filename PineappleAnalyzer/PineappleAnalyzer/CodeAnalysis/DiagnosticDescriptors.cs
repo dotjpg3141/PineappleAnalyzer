@@ -14,5 +14,14 @@ namespace PineappleAnalyzer.CodeAnalysis
             defaultSeverity: DiagnosticSeverity.Warning,
             isEnabledByDefault: true
         );
+
+        public static readonly DiagnosticDescriptor RemoveUnnecessaryConditionsFromPredicate = new DiagnosticDescriptor(
+            id: "PA0002",
+            title: "Remove unnecessary conditions from predicate",
+            messageFormat: "Remove unnecessary conditions from predicate",
+            category: "Simplification",
+            defaultSeverity: DiagnosticSeverity.Info,
+            isEnabledByDefault: true
+        );
     }
 }
