@@ -79,35 +79,41 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
             {
                 var parameterName = parameters[0].Identifier.ValueText;
 
-                List<IPropertySymbol> properties = GetBinaryExpressionOperands(body, SyntaxKind.LogicalAndExpression)
+                var operands = GetBinaryExpressionOperands(body, SyntaxKind.LogicalAndExpression)
                     .Select(operand =>
                     {
                         var propertyName = GetEqualParameterPropertyExpression(operand, parameterName);
-                        if (propertyName == null)
+                        IPropertySymbol? propertySymbol = null;
+
+                        if (propertyName != null)
                         {
-                            return null;
+                            var propertyInfo = context.SemanticModel.GetSymbolInfo(propertyName, context.CancellationToken);
+                            propertySymbol = propertyInfo.Symbol as IPropertySymbol;
                         }
 
-                        var propertyInfo = context.SemanticModel.GetSymbolInfo(propertyName, context.CancellationToken);
-                        return propertyInfo.Symbol as IPropertySymbol;
+                        return new BinaryOperatorOperand(operand, propertySymbol);
                     })
-                    .Where(operand => operand != null)
-                    .ToList()!;
+                    .ToList();
 
-                if (properties.Count == 0)
+                if (operands.Count == 0)
                 {
                     return;
                 }
 
+                var columns = operands
+                    .Where(c => c.ColumnSymbol != null)
+                    .Select(c => c.ColumnSymbol!)
+                    .ToList();
+
                 // TODO(jpg): check if this is true for inherited properties
                 Debug.Assert(
-                    properties.Select(p => p.ContainingType).Distinct().Count() <= 1,
+                    columns.Select(c => c.ContainingType).Distinct().Count() <= 1,
                     "All properties must be contained in the same type."
                 );
 
-                var type = properties[0].ContainingType;
+                var type = columns[0].ContainingType;
                 var declaredPrimaryKeys = type.GetMembers().OfType<IPropertySymbol>().Where(IsPrimaryKey);
-                var usedPrimaryKeys = properties.Where(IsPrimaryKey);
+                var usedPrimaryKeys = columns.Where(IsPrimaryKey);
 
                 // TODO(jpg): check if this is true for inherited properties
                 Debug.Assert(
@@ -121,7 +127,10 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
                     return;
                 }
 
-                var usedNonPrimaryKeys = properties.Where(p => !IsPrimaryKey(p)).ToList();
+                var usedNonPrimaryKeys = operands
+                    .Where(c => c.ColumnSymbol == null || !IsPrimaryKey(c.ColumnSymbol))
+                    .ToList();
+
                 if (usedNonPrimaryKeys.Count == 0)
                 {
                     return;
@@ -129,7 +138,8 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
 
                 var diagnostic = Diagnostic.Create(
                      descriptor: DiagnosticDescriptors.RemoveUnnecessaryConditionsFromPredicate,
-                     location: methodName.GetLocation()
+                     location: methodName.GetLocation(),
+                     additionalLocations: usedNonPrimaryKeys.Select(c => c.Expression.GetLocation())
                 );
 
                 context.ReportDiagnostic(diagnostic);
@@ -145,18 +155,15 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
             {
                 var currentExpression = IgnoreParenthesisExpression(todo.Pop());
 
-                if (currentExpression != null)
+                if (currentExpression.IsKind(kind))
                 {
-                    if (currentExpression.IsKind(kind))
-                    {
-                        var binaryExpression = (BinaryExpressionSyntax)currentExpression;
-                        todo.Push(binaryExpression.Left);
-                        todo.Push(binaryExpression.Right);
-                    }
-                    else
-                    {
-                        yield return currentExpression;
-                    }
+                    var binaryExpression = (BinaryExpressionSyntax)currentExpression;
+                    todo.Push(binaryExpression.Left);
+                    todo.Push(binaryExpression.Right);
+                }
+                else
+                {
+                    yield return currentExpression;
                 }
             }
         }
@@ -240,6 +247,18 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
                     && attribute.AttributeClass.ContainingNamespace.ContainingNamespace.ContainingNamespace?.Name == "System"
                     && attribute.AttributeClass.ContainingNamespace.ContainingNamespace.ContainingNamespace.ContainingNamespace?.IsGlobalNamespace == true;
             }
+        }
+
+        private sealed class BinaryOperatorOperand
+        {
+            public BinaryOperatorOperand(ExpressionSyntax expression, IPropertySymbol? columnSymbol)
+            {
+                Expression = expression;
+                ColumnSymbol = columnSymbol;
+            }
+
+            public ExpressionSyntax Expression { get; }
+            public IPropertySymbol? ColumnSymbol { get; }
         }
     }
 }

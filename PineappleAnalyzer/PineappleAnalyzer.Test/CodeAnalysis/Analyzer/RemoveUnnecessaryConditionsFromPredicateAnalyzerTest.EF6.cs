@@ -117,7 +117,8 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
                 Message = DiagnosticDescriptors.RemoveUnnecessaryConditionsFromPredicate.MessageFormat.ToString(CultureInfo.InvariantCulture),
                 Severity = DiagnosticDescriptors.RemoveUnnecessaryConditionsFromPredicate.DefaultSeverity,
                 Locations = new[] {
-                    new DiagnosticResultLocation("Test0.cs", 6 + IdNameLineOffset, 61)
+                    new DiagnosticResultLocation("Test0.cs", 6 + IdNameLineOffset, 61),
+                    new DiagnosticResultLocation("Test0.cs", 6 + IdNameLineOffset, 85)
                 }
             };
 
@@ -205,8 +206,9 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
                 Message = DiagnosticDescriptors.RemoveUnnecessaryConditionsFromPredicate.MessageFormat.ToString(CultureInfo.InvariantCulture),
                 Severity = DiagnosticDescriptors.RemoveUnnecessaryConditionsFromPredicate.DefaultSeverity,
                 Locations = new[] {
-                    new DiagnosticResultLocation("Test0.cs", 6 + Id1Id2NameLineOffset, 61)
-                }
+                    new DiagnosticResultLocation("Test0.cs", 6 + Id1Id2NameLineOffset, 61),
+                    new DiagnosticResultLocation("Test0.cs", 6 + Id1Id2NameLineOffset, 100),
+                },
             };
 
             VerifyCSharpDiagnostic(Id1Id2NameSource + source, expected);
