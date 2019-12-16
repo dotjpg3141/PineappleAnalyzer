@@ -79,7 +79,7 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
             {
                 var parameterName = parameters[0].Identifier.ValueText;
 
-                var properties = GetBinaryExpressionOperands(body, SyntaxKind.LogicalAndExpression)
+                List<IPropertySymbol> properties = GetBinaryExpressionOperands(body, SyntaxKind.LogicalAndExpression)
                     .Select(operand =>
                     {
                         var propertyName = GetEqualParameterPropertyExpression(operand, parameterName);
@@ -92,7 +92,7 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
                         return propertyInfo.Symbol as IPropertySymbol;
                     })
                     .Where(operand => operand != null)
-                    .ToList();
+                    .ToList()!;
 
                 if (properties.Count == 0)
                 {
@@ -163,7 +163,7 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
 
         private static ExpressionSyntax IgnoreParenthesisExpression(ExpressionSyntax expression)
         {
-            while (expression != null && expression.IsKind(SyntaxKind.ParenthesizedExpression))
+            while (expression.IsKind(SyntaxKind.ParenthesizedExpression))
             {
                 expression = ((ParenthesizedExpressionSyntax)expression).Expression;
             }
@@ -186,7 +186,7 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
             }
         }
 
-        private static SimpleNameSyntax GetEqualParameterPropertyExpression(ExpressionSyntax expression, string parameterName)
+        private static SimpleNameSyntax? GetEqualParameterPropertyExpression(ExpressionSyntax expression, string parameterName)
         {
             // matches: <parameterName>.<Property> == <Expression>
 
@@ -208,7 +208,7 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
             return left ?? right;
         }
 
-        private static SimpleNameSyntax GetPropertyIdentifier(ExpressionSyntax expression, string parameterName)
+        private static SimpleNameSyntax? GetPropertyIdentifier(ExpressionSyntax expression, string parameterName)
         {
             // matches: <name>.<Property>
 
