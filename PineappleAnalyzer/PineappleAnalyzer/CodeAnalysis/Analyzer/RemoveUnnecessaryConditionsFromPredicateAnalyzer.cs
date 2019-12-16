@@ -45,13 +45,12 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
             }
 
             var methodName = memberAccessExpression.Name.Identifier;
-            var semanticModel = context.SemanticModel;
 
             switch (methodName.ValueText)
             {
                 case "Where":
                 {
-                    var methodInfo = semanticModel.GetSymbolInfo(memberAccessExpression, context.CancellationToken);
+                    var methodInfo = context.SemanticModel.GetSymbolInfo(memberAccessExpression, context.CancellationToken);
                     if (methodInfo.Symbol is IMethodSymbol methodSymbol
                         && methodSymbol.ContainingType.Name == "Queryable"
                         && methodSymbol.ContainingType.ContainingNamespace?.Name == "Linq"
@@ -59,66 +58,9 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
                         && methodSymbol.ContainingType.ContainingNamespace.ContainingNamespace.ContainingNamespace?.IsGlobalNamespace == true
                         && methodSymbol.Parameters.Length == 1
                         && invocationExpression.ArgumentList.Arguments.Count == 1
-                        && invocationExpression.ArgumentList.Arguments[0].Expression is LambdaExpressionSyntax lambdaExpression
-                        && GetParameters(lambdaExpression) is var parameters
-                        && parameters.Length == 1
-                        && lambdaExpression.ExpressionBody != null)
+                        && invocationExpression.ArgumentList.Arguments[0].Expression is LambdaExpressionSyntax lambdaExpression)
                     {
-                        var parameterName = parameters[0].Identifier.ValueText;
-
-                        var properties = GetBinaryExpressionOperands(lambdaExpression.ExpressionBody, SyntaxKind.LogicalAndExpression)
-                            .Select(operand =>
-                            {
-                                var propertyName = GetEqualParameterPropertyExpression(operand, parameterName);
-                                if (propertyName == null)
-                                {
-                                    return null;
-                                }
-
-                                var propertyInfo = semanticModel.GetSymbolInfo(propertyName, context.CancellationToken);
-                                return propertyInfo.Symbol as IPropertySymbol;
-                            })
-                            .ToList();
-
-                        if (properties.Count == 0 || properties.Contains(null))
-                        {
-                            break;
-                        }
-
-                        // TODO(jpg): check if this is true for inherited properties
-                        Debug.Assert(
-                            properties.Select(p => p.ContainingType).Distinct().Count() == 1,
-                            "All properties must be contained in the same type."
-                        );
-
-                        var type = properties[0].ContainingType;
-                        var declaredPrimaryKeys = type.GetMembers().OfType<IPropertySymbol>().Where(IsPrimaryKey);
-                        var usedPrimaryKeys = properties.Where(IsPrimaryKey);
-
-                        // TODO(jpg): check if this is true for inherited properties
-                        Debug.Assert(
-                            !usedPrimaryKeys.Except(declaredPrimaryKeys).Any(),
-                            "usedPrimaryKeys ⊆ declaredPrimaryKeys"
-                        );
-
-                        var unusedPrimaryKeys = declaredPrimaryKeys.Except(usedPrimaryKeys);
-                        if (unusedPrimaryKeys.Any())
-                        {
-                            break;
-                        }
-
-                        var usedNonPrimaryKeys = properties.Where(p => !IsPrimaryKey(p)).ToList();
-                        if (usedNonPrimaryKeys.Count == 0)
-                        {
-                            break;
-                        }
-
-                        var diagnostic = Diagnostic.Create(
-                             DiagnosticDescriptors.RemoveUnnecessaryConditionsFromPredicate,
-                             methodName.GetLocation()
-                        );
-
-                        context.ReportDiagnostic(diagnostic);
+                        AnalyzePredicate(context, methodName, lambdaExpression);
                     }
 
                     break;
@@ -126,6 +68,71 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
 
                 default:
                     break;
+            }
+        }
+
+        private static void AnalyzePredicate(SyntaxNodeAnalysisContext context, SyntaxToken methodName, LambdaExpressionSyntax lambdaExpression)
+        {
+            if (GetParameters(lambdaExpression) is var parameters
+                && parameters.Length == 1
+                && lambdaExpression.ExpressionBody is ExpressionSyntax body)
+            {
+                var parameterName = parameters[0].Identifier.ValueText;
+
+                var properties = GetBinaryExpressionOperands(body, SyntaxKind.LogicalAndExpression)
+                    .Select(operand =>
+                    {
+                        var propertyName = GetEqualParameterPropertyExpression(operand, parameterName);
+                        if (propertyName == null)
+                        {
+                            return null;
+                        }
+
+                        var propertyInfo = context.SemanticModel.GetSymbolInfo(propertyName, context.CancellationToken);
+                        return propertyInfo.Symbol as IPropertySymbol;
+                    })
+                    .Where(operand => operand != null)
+                    .ToList();
+
+                if (properties.Count == 0)
+                {
+                    return;
+                }
+
+                // TODO(jpg): check if this is true for inherited properties
+                Debug.Assert(
+                    properties.Select(p => p.ContainingType).Distinct().Count() <= 1,
+                    "All properties must be contained in the same type."
+                );
+
+                var type = properties[0].ContainingType;
+                var declaredPrimaryKeys = type.GetMembers().OfType<IPropertySymbol>().Where(IsPrimaryKey);
+                var usedPrimaryKeys = properties.Where(IsPrimaryKey);
+
+                // TODO(jpg): check if this is true for inherited properties
+                Debug.Assert(
+                    !usedPrimaryKeys.Except(declaredPrimaryKeys).Any(),
+                    "usedPrimaryKeys ⊆ declaredPrimaryKeys"
+                );
+
+                var unusedPrimaryKeys = declaredPrimaryKeys.Except(usedPrimaryKeys);
+                if (unusedPrimaryKeys.Any())
+                {
+                    return;
+                }
+
+                var usedNonPrimaryKeys = properties.Where(p => !IsPrimaryKey(p)).ToList();
+                if (usedNonPrimaryKeys.Count == 0)
+                {
+                    return;
+                }
+
+                var diagnostic = Diagnostic.Create(
+                     descriptor: DiagnosticDescriptors.RemoveUnnecessaryConditionsFromPredicate,
+                     location: methodName.GetLocation()
+                );
+
+                context.ReportDiagnostic(diagnostic);
             }
         }
 
