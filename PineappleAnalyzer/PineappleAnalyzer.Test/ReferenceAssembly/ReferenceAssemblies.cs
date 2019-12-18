@@ -16,12 +16,7 @@ using NuGet.Packaging.Core;
 using NuGet.Protocol.Core.Types;
 using NuGet.Protocol;
 using NuGet.Resolver;
-
-#if NET46 || NET472 || NETSTANDARD
-
 using NuGet.Packaging.Signing;
-
-#endif
 
 namespace Microsoft.CodeAnalysis.Testing
 {
@@ -77,17 +72,7 @@ namespace Microsoft.CodeAnalysis.Testing
         {
             get
             {
-#if NETSTANDARD1_5
-                return NetStandard.NetStandard15;
-#elif NETSTANDARD2_0
-                return NetStandard.NetStandard20;
-#elif NET452
-                return NetFramework.Net452.Default;
-#elif NET46
                 return NetFramework.Net46.Default;
-#elif NET472
-                return NetFramework.Net472.Default;
-#endif
             }
         }
 
@@ -197,9 +182,7 @@ namespace Microsoft.CodeAnalysis.Testing
                 var dependencyInfo = await dependencyInfoResource.ResolvePackage(
                     packageIdentity,
                     targetFramework,
-#if !NET452
                     cacheContext,
-#endif
                     logger,
                     cancellationToken);
                 if (dependencyInfo is null)
@@ -284,29 +267,11 @@ namespace Microsoft.CodeAnalysis.Testing
                 var temporaryPackagesFolder = Path.Combine(Path.GetTempPath(), "test-packages");
                 Directory.CreateDirectory(temporaryPackagesFolder);
                 var localPathResolver = new PackagePathResolver(temporaryPackagesFolder);
-#if NET452
-                var packageExtractionContext = new PackageExtractionContext(logger)
-                {
-                    PackageSaveMode = PackageSaveMode.Defaultv3,
-                    XmlDocFileSaveMode = XmlDocFileSaveMode.None,
-                };
-#elif NET46 || NET472 || NETSTANDARD2_0
                 var packageExtractionContext = new PackageExtractionContext(
                     PackageSaveMode.Defaultv3,
                     XmlDocFileSaveMode.None,
                     ClientPolicyContext.GetClientPolicy(settings, logger),
                     logger);
-#elif NETSTANDARD1_5
-                var packageExtractionContext = new PackageExtractionContext(
-                    PackageSaveMode.Defaultv3,
-                    XmlDocFileSaveMode.None,
-                    logger,
-                    new PackageSignatureVerifier(
-                        SignatureVerificationProviderFactory.GetSignatureVerificationProviders(),
-                        SignedPackageVerifierSettings.Default));
-#else
-#error The current target framework is not supported.
-#endif
 
                 var frameworkReducer = new FrameworkReducer();
 
@@ -335,11 +300,7 @@ namespace Microsoft.CodeAnalysis.Testing
                         }
 
                         await PackageExtractor.ExtractPackageAsync(
-#if !NET452 && !NETSTANDARD1_5
-#pragma warning disable SA1114 // Parameter list should follow declaration
                             downloadResult.PackageSource,
-#pragma warning restore SA1114 // Parameter list should follow declaration
-#endif
                             downloadResult.PackageStream,
                             localPathResolver,
                             packageExtractionContext,
