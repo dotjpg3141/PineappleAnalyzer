@@ -1,4 +1,4 @@
-name: .NET Core
+name: .NET
 
 on: [push]
 
@@ -12,6 +12,12 @@ jobs:
 
     - name: Setup MSBuild.exe
       uses: warrenbuckley/Setup-MSBuild@v1
+      
+    - name: Setup Nuget.exe
+      uses: warrenbuckley/Setup-Nuget@v1
+
+    - name: Nuget Restore
+      run: nuget restore
 
     - name: MSBuild
       run: msbuild PineappleAnalyzer.sln
