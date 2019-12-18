@@ -13,7 +13,7 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
     [TestClass]
     public class RemoveUnnecessaryConditionsFromPredicateAnalyzerTest : DiagnosticVerifier
     {
-        internal const string IdNameSource = @"
+        internal const string Prelude = @"
             using System.ComponentModel.DataAnnotations;
             using System.ComponentModel.DataAnnotations.Schema;
             using System.Data.Entity;
@@ -23,7 +23,9 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
             {
                 public DbSet<TestEntity> DbTestEntities { get; set; }
             }
+        ";
 
+        private const string IdNameSource = Prelude + @"
             public class TestEntity
             {
                 [Key] public int Id { get; set; }
@@ -31,17 +33,7 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
             }
         ";
 
-        internal const string Id1Id2NameSource = @"
-            using System.ComponentModel.DataAnnotations;
-            using System.ComponentModel.DataAnnotations.Schema;
-            using System.Data.Entity;
-            using System.Linq;
-
-            public class TestContext : DbContext
-            {
-                public DbSet<TestEntity> DbTestEntities { get; set; }
-            }
-
+        private const string Id1Id2NameSource = Prelude + @"
             public class TestEntity
             {
                 [Key] public int Id1 { get; set; }
