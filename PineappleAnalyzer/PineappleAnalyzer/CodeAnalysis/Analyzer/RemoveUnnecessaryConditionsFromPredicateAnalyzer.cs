@@ -139,7 +139,7 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
                 var diagnostic = Diagnostic.Create(
                      descriptor: DiagnosticDescriptors.RemoveUnnecessaryConditionsFromPredicate,
                      location: methodName.GetLocation(),
-                     additionalLocations: usedNonPrimaryKeys.Select(c => c.Expression.GetLocation())
+                     additionalLocations: new[] { lambdaExpression.GetLocation() }.Concat(usedNonPrimaryKeys.Select(c => c.Expression.GetLocation()))
                 );
 
                 context.ReportDiagnostic(diagnostic);

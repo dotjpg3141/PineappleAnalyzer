@@ -13,7 +13,7 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
     [TestClass]
     public class RemoveUnnecessaryConditionsFromPredicateAnalyzerTest : DiagnosticVerifier
     {
-        private const string IdNameSource = @"
+        internal const string IdNameSource = @"
             using System.ComponentModel.DataAnnotations;
             using System.ComponentModel.DataAnnotations.Schema;
             using System.Data.Entity;
@@ -31,7 +31,7 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
             }
         ";
 
-        private const string Id1Id2NameSource = @"
+        internal const string Id1Id2NameSource = @"
             using System.ComponentModel.DataAnnotations;
             using System.ComponentModel.DataAnnotations.Schema;
             using System.Data.Entity;
@@ -118,6 +118,7 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
                 Severity = DiagnosticDescriptors.RemoveUnnecessaryConditionsFromPredicate.DefaultSeverity,
                 Locations = new[] {
                     new DiagnosticResultLocation("Test0.cs", 6 + IdNameLineOffset, 61),
+                    new DiagnosticResultLocation("Test0.cs", 6 + IdNameLineOffset, 67),
                     new DiagnosticResultLocation("Test0.cs", 6 + IdNameLineOffset, 85)
                 }
             };
@@ -207,6 +208,7 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
                 Severity = DiagnosticDescriptors.RemoveUnnecessaryConditionsFromPredicate.DefaultSeverity,
                 Locations = new[] {
                     new DiagnosticResultLocation("Test0.cs", 6 + Id1Id2NameLineOffset, 61),
+                    new DiagnosticResultLocation("Test0.cs", 6 + Id1Id2NameLineOffset, 67),
                     new DiagnosticResultLocation("Test0.cs", 6 + Id1Id2NameLineOffset, 100),
                 },
             };
