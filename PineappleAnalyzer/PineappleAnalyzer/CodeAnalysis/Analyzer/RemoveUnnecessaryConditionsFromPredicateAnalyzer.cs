@@ -13,136 +13,169 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
     public class RemoveUnnecessaryConditionsFromPredicateAnalyzer : DiagnosticAnalyzerBase
     {
+        private static readonly ImmutableArray<string> queryableTypeNames = ImmutableArray.Create("System.Linq.Queryable");
+        private static readonly ImmutableArray<string> primaryKeyAttributeTypeNames = ImmutableArray.Create("System.ComponentModel.DataAnnotations.KeyAttribute");
+
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
             => ImmutableArray.Create(DiagnosticDescriptors.RemoveUnnecessaryConditionsFromPredicate);
 
         public override void Initialize(AnalysisContext context)
         {
-            context.RegisterCompilationStartAction((startContext) =>
-            {
-                var registerActions = false;
-
-                if (!registerActions)
-                {
-                    var dbContextSymbol = startContext.Compilation.GetTypeByMetadataName("System.Data.Entity.DbContext");
-                    registerActions = dbContextSymbol != null;
-                }
-
-                if (registerActions)
-                {
-                    startContext.RegisterSyntaxNodeAction(AnalyzeInvocationExpression, SyntaxKind.InvocationExpression);
-                }
-            });
+            context.EnableConcurrentExecution();
+            context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.Analyze);
+            context.RegisterCompilationStartAction(CompilationStartAction);
         }
 
-        private static void AnalyzeInvocationExpression(SyntaxNodeAnalysisContext context)
+        private void CompilationStartAction(CompilationStartAnalysisContext context)
         {
-            var invocationExpression = (InvocationExpressionSyntax)context.Node;
-
-            if (!(invocationExpression.Expression is MemberAccessExpressionSyntax memberAccessExpression))
+            var queryableTypes = ResolveTypes(queryableTypeNames);
+            if (queryableTypes.Count == 0)
             {
                 return;
             }
 
-            var methodName = memberAccessExpression.Name.Identifier;
-
-            switch (methodName.ValueText)
+            var primaryKeyAttributeTypes = ResolveTypes(primaryKeyAttributeTypeNames);
+            if (primaryKeyAttributeTypes.Count == 0)
             {
-                case "Where":
-                {
-                    var methodInfo = context.SemanticModel.GetSymbolInfo(memberAccessExpression, context.CancellationToken);
-                    if (methodInfo.Symbol is IMethodSymbol methodSymbol
-                        && methodSymbol.ContainingType.Name == "Queryable"
-                        && methodSymbol.ContainingType.ContainingNamespace?.Name == "Linq"
-                        && methodSymbol.ContainingType.ContainingNamespace.ContainingNamespace?.Name == "System"
-                        && methodSymbol.ContainingType.ContainingNamespace.ContainingNamespace.ContainingNamespace?.IsGlobalNamespace == true
-                        && methodSymbol.Parameters.Length == 1
-                        && invocationExpression.ArgumentList.Arguments.Count == 1
-                        && invocationExpression.ArgumentList.Arguments[0].Expression is LambdaExpressionSyntax lambdaExpression)
-                    {
-                        AnalyzePredicate(context, methodName, lambdaExpression);
-                    }
+                return;
+            }
 
-                    break;
-                }
+            var analzyer = new Analyzer(queryableTypes, primaryKeyAttributeTypes);
+            context.RegisterSyntaxNodeAction(analzyer.AnalyzeInvocationExpression, SyntaxKind.InvocationExpression);
 
-                default:
-                    break;
+            ImmutableHashSet<INamedTypeSymbol> ResolveTypes(IEnumerable<string> typeNames)
+            {
+                return typeNames
+                    .Select(name => context.Compilation.GetTypeByMetadataName(name))
+                    .Where(symbol => symbol != null)
+                    .ToImmutableHashSet();
             }
         }
 
-        private static void AnalyzePredicate(SyntaxNodeAnalysisContext context, SyntaxToken methodName, LambdaExpressionSyntax lambdaExpression)
+        private class Analyzer
         {
-            if (GetParameters(lambdaExpression) is var parameters
-                && parameters.Length == 1
-                && lambdaExpression.ExpressionBody is ExpressionSyntax body)
+            public ImmutableHashSet<INamedTypeSymbol> QueryableTypes { get; }
+
+            public ImmutableHashSet<INamedTypeSymbol> PrimaryKeyAttributesTypes { get; }
+
+            public Analyzer(ImmutableHashSet<INamedTypeSymbol> queryableTypes, ImmutableHashSet<INamedTypeSymbol> primaryKeyAttributesTypes)
             {
-                var parameterName = parameters[0].Identifier.ValueText;
+                QueryableTypes = queryableTypes;
+                PrimaryKeyAttributesTypes = primaryKeyAttributesTypes;
+            }
 
-                var operands = GetBinaryExpressionOperands(body, SyntaxKind.LogicalAndExpression)
-                    .Select(operand =>
+            public void AnalyzeInvocationExpression(SyntaxNodeAnalysisContext context)
+            {
+                var invocationExpression = (InvocationExpressionSyntax)context.Node;
+
+                if (!(invocationExpression.Expression is MemberAccessExpressionSyntax memberAccessExpression))
+                {
+                    return;
+                }
+
+                var methodName = memberAccessExpression.Name.Identifier;
+
+                switch (methodName.ValueText)
+                {
+                    case "Where":
                     {
-                        var propertyName = GetEqualParameterPropertyExpression(operand, parameterName);
-                        IPropertySymbol? propertySymbol = null;
-
-                        if (propertyName != null)
+                        var methodInfo = context.SemanticModel.GetSymbolInfo(memberAccessExpression, context.CancellationToken);
+                        if (methodInfo.Symbol is IMethodSymbol methodSymbol
+                            && QueryableTypes.Contains(methodSymbol.ContainingType)
+                            && methodSymbol.Parameters.Length == 1
+                            && invocationExpression.ArgumentList.Arguments.Count == 1
+                            && invocationExpression.ArgumentList.Arguments[0].Expression is LambdaExpressionSyntax lambdaExpression)
                         {
-                            var propertyInfo = context.SemanticModel.GetSymbolInfo(propertyName, context.CancellationToken);
-                            propertySymbol = propertyInfo.Symbol as IPropertySymbol;
+                            AnalyzePredicate(context, methodName, lambdaExpression);
                         }
 
-                        return new BinaryOperatorOperand(operand, propertySymbol);
-                    })
-                    .ToList();
+                        break;
+                    }
 
-                if (operands.Count == 0)
-                {
-                    return;
+                    default:
+                        break;
                 }
+            }
 
-                var columns = operands
-                    .Where(c => c.ColumnSymbol != null)
-                    .Select(c => c.ColumnSymbol!)
-                    .ToList();
-
-                // TODO(jpg): check if this is true for inherited properties
-                Debug.Assert(
-                    columns.Select(c => c.ContainingType).Distinct().Count() <= 1,
-                    "All properties must be contained in the same type."
-                );
-
-                var type = columns[0].ContainingType;
-                var declaredPrimaryKeys = type.GetMembers().OfType<IPropertySymbol>().Where(IsPrimaryKey);
-                var usedPrimaryKeys = columns.Where(IsPrimaryKey);
-
-                // TODO(jpg): check if this is true for inherited properties
-                Debug.Assert(
-                    !usedPrimaryKeys.Except(declaredPrimaryKeys).Any(),
-                    "usedPrimaryKeys ⊆ declaredPrimaryKeys"
-                );
-
-                var unusedPrimaryKeys = declaredPrimaryKeys.Except(usedPrimaryKeys);
-                if (unusedPrimaryKeys.Any())
+            private void AnalyzePredicate(SyntaxNodeAnalysisContext context, SyntaxToken methodName, LambdaExpressionSyntax lambdaExpression)
+            {
+                if (GetParameters(lambdaExpression) is var parameters
+                    && parameters.Length == 1
+                    && lambdaExpression.ExpressionBody is ExpressionSyntax body)
                 {
-                    return;
+                    var parameterName = parameters[0].Identifier.ValueText;
+
+                    var operands = GetBinaryExpressionOperands(body, SyntaxKind.LogicalAndExpression)
+                        .Select(operand =>
+                        {
+                            var propertyName = GetEqualParameterPropertyExpression(operand, parameterName);
+                            IPropertySymbol? propertySymbol = null;
+
+                            if (propertyName != null)
+                            {
+                                var propertyInfo = context.SemanticModel.GetSymbolInfo(propertyName, context.CancellationToken);
+                                propertySymbol = propertyInfo.Symbol as IPropertySymbol;
+                            }
+
+                            return new BinaryOperatorOperand(operand, propertySymbol);
+                        })
+                        .ToList();
+
+                    if (operands.Count == 0)
+                    {
+                        return;
+                    }
+
+                    var columns = operands
+                        .Where(c => c.ColumnSymbol != null)
+                        .Select(c => c.ColumnSymbol!)
+                        .ToList();
+
+                    // TODO(jpg): check if this is true for inherited properties
+                    Debug.Assert(
+                        columns.Select(c => c.ContainingType).Distinct().Count() <= 1,
+                        "All properties must be contained in the same type."
+                    );
+
+                    var type = columns[0].ContainingType;
+                    var declaredPrimaryKeys = type.GetMembers().OfType<IPropertySymbol>().Where(IsPrimaryKey);
+                    var usedPrimaryKeys = columns.Where(IsPrimaryKey);
+
+                    // TODO(jpg): check if this is true for inherited properties
+                    Debug.Assert(
+                        !usedPrimaryKeys.Except(declaredPrimaryKeys).Any(),
+                        "usedPrimaryKeys ⊆ declaredPrimaryKeys"
+                    );
+
+                    var unusedPrimaryKeys = declaredPrimaryKeys.Except(usedPrimaryKeys);
+                    if (unusedPrimaryKeys.Any())
+                    {
+                        return;
+                    }
+
+                    var usedNonPrimaryKeys = operands
+                        .Where(c => c.ColumnSymbol == null || !IsPrimaryKey(c.ColumnSymbol))
+                        .ToList();
+
+                    if (usedNonPrimaryKeys.Count == 0)
+                    {
+                        return;
+                    }
+
+                    var diagnostic = Diagnostic.Create(
+                         descriptor: DiagnosticDescriptors.RemoveUnnecessaryConditionsFromPredicate,
+                         location: methodName.GetLocation(),
+                         additionalLocations: new[] { lambdaExpression.GetLocation() }.Concat(usedNonPrimaryKeys.Select(c => c.Expression.GetLocation()))
+                    );
+
+                    context.ReportDiagnostic(diagnostic);
                 }
+            }
 
-                var usedNonPrimaryKeys = operands
-                    .Where(c => c.ColumnSymbol == null || !IsPrimaryKey(c.ColumnSymbol))
-                    .ToList();
-
-                if (usedNonPrimaryKeys.Count == 0)
-                {
-                    return;
-                }
-
-                var diagnostic = Diagnostic.Create(
-                     descriptor: DiagnosticDescriptors.RemoveUnnecessaryConditionsFromPredicate,
-                     location: methodName.GetLocation(),
-                     additionalLocations: new[] { lambdaExpression.GetLocation() }.Concat(usedNonPrimaryKeys.Select(c => c.Expression.GetLocation()))
-                );
-
-                context.ReportDiagnostic(diagnostic);
+            private bool IsPrimaryKey(IPropertySymbol property)
+            {
+                return property.GetAttributes()
+                    .Any((attribute) => PrimaryKeyAttributesTypes.Contains(attribute.AttributeClass));
             }
         }
 
@@ -233,20 +266,6 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
             }
 
             return null;
-        }
-
-        private static bool IsPrimaryKey(IPropertySymbol property)
-        {
-            return property.GetAttributes().Any(IsPrimaryKeyAttribute);
-
-            bool IsPrimaryKeyAttribute(AttributeData attribute)
-            {
-                return attribute.AttributeClass.Name == "KeyAttribute"
-                    && attribute.AttributeClass.ContainingNamespace?.Name == "DataAnnotations"
-                    && attribute.AttributeClass.ContainingNamespace.ContainingNamespace?.Name == "ComponentModel"
-                    && attribute.AttributeClass.ContainingNamespace.ContainingNamespace.ContainingNamespace?.Name == "System"
-                    && attribute.AttributeClass.ContainingNamespace.ContainingNamespace.ContainingNamespace.ContainingNamespace?.IsGlobalNamespace == true;
-            }
         }
 
         private sealed class BinaryOperatorOperand
