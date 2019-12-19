@@ -13,8 +13,25 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
     public class RemoveUnnecessaryConditionsFromPredicateAnalyzer : DiagnosticAnalyzerBase
     {
-        private static readonly ImmutableArray<string> queryableTypeNames = ImmutableArray.Create("System.Linq.Queryable");
+        private static readonly ImmutableArray<string> queryableTypeNames = ImmutableArray.Create("System.Linq.Queryable", "System.Data.Entity.QueryableExtensions");
         private static readonly ImmutableArray<string> primaryKeyAttributeTypeNames = ImmutableArray.Create("System.ComponentModel.DataAnnotations.KeyAttribute");
+        private static readonly string ExpressionTypeName = typeof(System.Linq.Expressions.Expression<>).FullName;
+        private static readonly string FuncTypeName = typeof(Func<,>).FullName;
+
+        private static readonly ImmutableHashSet<string> queryMethodNames = ImmutableHashSet.Create(
+            "All", "AllAync",
+            "Any", "AnyAsync",
+            "Contains", "ContainsAsync",
+            "Count", "CountAsync",
+            "First", "FirstAsync",
+            "FirstOrDefault", "FirstOrDefaultAsync",
+            "Last", "LastAsync",
+            "LastOrDefault", "LastOrDefaultAsync",
+            "LongCount", "LongCountAsync",
+            "Single", "SingleAsync",
+            "SingleOrDefault", "SingleOrDefaultAsync",
+            "Where"
+        );
 
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
             => ImmutableArray.Create(DiagnosticDescriptors.RemoveUnnecessaryConditionsFromPredicate);
@@ -28,6 +45,18 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
 
         private void CompilationStartAction(CompilationStartAnalysisContext context)
         {
+            var expressionType = context.Compilation.GetTypeByMetadataName(ExpressionTypeName);
+            if (expressionType == null)
+            {
+                return;
+            }
+
+            var funcType = context.Compilation.GetTypeByMetadataName(FuncTypeName);
+            if (funcType == null)
+            {
+                return;
+            }
+
             var queryableTypes = ResolveTypes(queryableTypeNames);
             if (queryableTypes.Count == 0)
             {
@@ -40,7 +69,7 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
                 return;
             }
 
-            var analzyer = new Analyzer(queryableTypes, primaryKeyAttributeTypes);
+            var analzyer = new Analyzer(expressionType, funcType, queryableTypes, primaryKeyAttributeTypes);
             context.RegisterSyntaxNodeAction(analzyer.AnalyzeInvocationExpression, SyntaxKind.InvocationExpression);
 
             ImmutableHashSet<INamedTypeSymbol> ResolveTypes(IEnumerable<string> typeNames)
@@ -54,12 +83,17 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
 
         private class Analyzer
         {
+            public INamedTypeSymbol ExpressionType { get; }
+            public INamedTypeSymbol FuncType { get; }
+
             public ImmutableHashSet<INamedTypeSymbol> QueryableTypes { get; }
 
             public ImmutableHashSet<INamedTypeSymbol> PrimaryKeyAttributesTypes { get; }
 
-            public Analyzer(ImmutableHashSet<INamedTypeSymbol> queryableTypes, ImmutableHashSet<INamedTypeSymbol> primaryKeyAttributesTypes)
+            public Analyzer(INamedTypeSymbol expressionType, INamedTypeSymbol funcType, ImmutableHashSet<INamedTypeSymbol> queryableTypes, ImmutableHashSet<INamedTypeSymbol> primaryKeyAttributesTypes)
             {
+                ExpressionType = expressionType;
+                FuncType = funcType;
                 QueryableTypes = queryableTypes;
                 PrimaryKeyAttributesTypes = primaryKeyAttributesTypes;
             }
@@ -67,33 +101,35 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
             public void AnalyzeInvocationExpression(SyntaxNodeAnalysisContext context)
             {
                 var invocationExpression = (InvocationExpressionSyntax)context.Node;
-
                 if (!(invocationExpression.Expression is MemberAccessExpressionSyntax memberAccessExpression))
                 {
                     return;
                 }
 
                 var methodName = memberAccessExpression.Name.Identifier;
-
-                switch (methodName.ValueText)
+                if (!queryMethodNames.Contains(methodName.ValueText))
                 {
-                    case "Where":
-                    {
-                        var methodInfo = context.SemanticModel.GetSymbolInfo(memberAccessExpression, context.CancellationToken);
-                        if (methodInfo.Symbol is IMethodSymbol methodSymbol
-                            && QueryableTypes.Contains(methodSymbol.ContainingType)
-                            && methodSymbol.Parameters.Length == 1
-                            && invocationExpression.ArgumentList.Arguments.Count == 1
-                            && invocationExpression.ArgumentList.Arguments[0].Expression is LambdaExpressionSyntax lambdaExpression)
-                        {
-                            AnalyzePredicate(context, methodName, lambdaExpression);
-                        }
+                    return;
+                }
 
-                        break;
+                var methodInfo = context.SemanticModel.GetSymbolInfo(memberAccessExpression, context.CancellationToken);
+                if (methodInfo.Symbol is IMethodSymbol methodSymbol
+                    && QueryableTypes.Contains(methodSymbol.ContainingType)
+                    && methodSymbol.Parameters.Length >= 1
+                    && invocationExpression.ArgumentList.Arguments.Count >= 1)
+                {
+                    foreach (var argument in invocationExpression.ArgumentList.Arguments)
+                    {
+                        if (argument.Expression is LambdaExpressionSyntax lambdaExpression)
+                        {
+                            var typeInfo = context.SemanticModel.GetTypeInfo(argument.Expression);
+                            if (typeInfo.ConvertedType != null && IsPredicate(typeInfo.ConvertedType))
+                            {
+                                AnalyzePredicate(context, methodName, lambdaExpression);
+                            }
+                        }
                     }
 
-                    default:
-                        break;
                 }
             }
 
@@ -176,6 +212,30 @@ namespace PineappleAnalyzer.CodeAnalysis.Analyzer
             {
                 return property.GetAttributes()
                     .Any((attribute) => PrimaryKeyAttributesTypes.Contains(attribute.AttributeClass));
+            }
+
+            private bool IsPredicate(ITypeSymbol type)
+            {
+                if (!ExpressionType.Equals(type.OriginalDefinition, SymbolEqualityComparer.Default)
+                    || !(type is INamedTypeSymbol namedType))
+                {
+                    return false;
+                }
+
+                var actualFuncType = namedType.TypeArguments[0];
+                if (!FuncType.Equals(actualFuncType.OriginalDefinition, SymbolEqualityComparer.Default)
+                    || !(actualFuncType is INamedTypeSymbol actualFuncNamedType))
+                {
+                    return false;
+                }
+
+                var returnType = actualFuncNamedType.TypeArguments[1];
+                if (returnType.SpecialType != SpecialType.System_Boolean)
+                {
+                    return false;
+                }
+
+                return true;
             }
         }
 
